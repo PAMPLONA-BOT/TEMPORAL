@@ -3,9 +3,6 @@ const ASSETS = [
   './',
   'index.html',
   'inicio.html',
-  'indexrevisiones.html',
-  'indexOPERARIOS.HTML',
-  'datos_pamplona.xlsx',
   'manifest.json',
   'config.xlsx',
   'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js',
@@ -68,4 +65,5 @@ self.addEventListener('fetch', (e) => {
       });
     })
   );
+
 });
