@@ -1,6 +1,6 @@
 {
   "name": "Regional Pamplona - Control Eléctrico",
-  "short_name": "Pamplona-Elec",
+  "short_name": "Pamplona-Temporal",
   "description": "Sistema de Gestión de Campo - Supervisor Alexis Martinez",
   "start_url": "index.html", 
   "display": "standalone",
@@ -14,4 +14,5 @@
       "type": "image/png"
     }
   ]
+
 }
