@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Regional Pamplona - Control Eléctrico</title>
+    <link rel="manifest" href="manifest.json">
+    <style>
+        :root {
+            --azul-electrico: #00d4ff;
+            --azul-glow: rgba(0, 212, 255, 0.4);
+            --amarillo-industrial: #ffcc00;
+            --fondo-negro: #0a0b0d;
+            --card-bg: rgba(255, 255, 255, 0.05);
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: 'Segoe UI', Roboto, sans-serif;
+            background-color: var(--fondo-negro);
+            color: white;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+            overflow-x: hidden;
+            /* Fondo de malla tecnológica */
+            background-image: 
+                linear-gradient(var(--card-bg) 1px, transparent 1px),
+                linear-gradient(90deg, var(--card-bg) 1px, transparent 1px);
+            background-size: 40px 40px;
+        }
+
+        /* MARCA DE AGUA ESTILO LOGO FONDO */
+        .marca-agua {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%) rotate(-15deg);
+            font-size: 8vw;
+            color: rgba(255, 255, 255, 0.03);
+            white-space: nowrap;
+            z-index: -1;
+            font-weight: 900;
+            letter-spacing: 10px;
+            pointer-events: none;
+            border: 5px solid rgba(255, 255, 255, 0.02);
+            padding: 20px;
+        }
+
+        header {
+            width: 100%;
+            padding: 30px 0;
+            text-align: center;
+            background: linear-gradient(to bottom, rgba(0, 212, 255, 0.1), transparent);
+            border-bottom: 1px solid var(--azul-electrico);
+            margin-bottom: 30px;
+        }
+
+        header h1 {
+            margin: 0;
+            letter-spacing: 3px;
+            font-size: 1.8rem;
+            text-shadow: 0 0 10px var(--azul-electrico);
+        }
+
+        header small {
+            color: var(--azul-electrico);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .grid-container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            padding: 20px;
+            max-width: 600px;
+            width: 90%;
+        }
+
+        /* ESTILO DE LOS BOTONES TIPO PANEL */
+        .btn {
+            background: var(--card-bg);
+            backdrop-filter: blur(10px); /* Efecto cristal */
+            border: 1px solid rgba(0, 212, 255, 0.3);
+            color: #e0e0e0;
+            padding: 35px 15px;
+            border-radius: 4px; /* Bordes más rectos para look industrial */
+            font-weight: 600;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+            font-size: 0.85rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: inset 0 0 15px rgba(0,0,0,0.5);
+            position: relative;
+            overflow: hidden;
+        }
+
+        /* Línea decorativa lateral en cada botón */
+        .btn::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 0;
+            height: 100%;
+            width: 4px;
+            background: var(--azul-electrico);
+            box-shadow: 0 0 10px var(--azul-electrico);
+        }
+
+        .btn:hover {
+            background: rgba(0, 212, 255, 0.1);
+            border-color: var(--azul-electrico);
+            transform: translateY(-3px);
+            box-shadow: 0 0 20px var(--azul-glow);
+            color: white;
+        }
+
+        /* Botón especial de Pendientes */
+        .btn-alert {
+            border-color: rgba(255, 204, 0, 0.3);
+        }
+        .btn-alert::before {
+            background: var(--amarillo-industrial);
+            box-shadow: 0 0 10px var(--amarillo-industrial);
+        }
+        .btn-alert:hover {
+            border-color: var(--amarillo-industrial);
+            box-shadow: 0 0 20px rgba(255, 204, 0, 0.3);
+        }
+
+        /* Footer con estado de conexión */
+        footer {
+            margin-top: auto;
+            padding: 20px;
+            font-size: 0.7rem;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="marca-agua">REGIONAL<br>PAMPLONA</div>
+
+    <header>
+        <h1>REGIONAL PAMPLONA</h1>
+        <small>Supervisor Ing. Alexis Martinez</small>
+    </header>
+
+    <div class="grid-container">
+        <div class="btn" onclick="location.href='inicio.html'">R Inicio y Fin</div>
+        
+        <div class="btn" onclick="window.location.href='https://musicaalex.sistemalex.xyz/PWA-Novedades/'">Reportes</div>
+        
+    </div>
+
+    <footer>
+        SISTEMA DE GESTIÓN DE CAMPO V1.0 - MODO OFFLINE ACTIVADO
+    </footer>
+
+    <script>
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('sw.js')
+                .then(() => console.log("Carga técnica optimizada."));
+        }
+    </script>
+    <script>
+if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+        navigator.serviceWorker.register('sw.js')
+            .then(reg => {
+                console.log('Service Worker registrado correctamente');
+                
+                // Si detecta un cambio en sw.js, avisa o actualiza
+                reg.onupdatefound = () => {
+                    const installingWorker = reg.installing;
+                    installingWorker.onstatechange = () => {
+                        if (installingWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                            console.log('Nueva versión disponible. Por favor, recargue.');
+                        }
+                    };
+                };
+            })
+            .catch(err => console.error('Error al registrar el SW:', err));
+    });
+}
+</script>
+
+</body>
+</html>

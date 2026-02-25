@@ -1,0 +1,573 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="utf-8"/>
+    <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+    <title>Regional Pamplona - Control Oficial</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <style>
+        body { font-family: 'Arial', sans-serif; margin: 0; padding: 15px; background-color: #f4f4f4; }
+        .container { max-width: 500px; margin: auto; background: white; padding: 20px; border-radius: 12px; box-shadow: 0 5px 15px rgba(0,0,0,0.2); text-align: center; }
+        .form-group { margin-bottom: 12px; text-align: left; }
+        label { font-weight: bold; font-size: 14px; display: block; margin-bottom: 4px; }
+        select, input { width: 100%; padding: 12px; border: 1px solid #ccc; border-radius: 8px; font-size: 16px; box-sizing: border-box; }
+        select:disabled, input:disabled { background-color: #e9ecef; cursor: not-allowed; }
+        .btn-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 15px; }
+        .btn { padding: 15px; border: none; border-radius: 8px; color: white; font-weight: bold; cursor: pointer; font-size: 14px; }
+        .btn:disabled { background-color: #ccc !important; opacity: 0.6; cursor: not-allowed; }
+        .btn-salida { background-color: #607d8b; }
+        .btn-inicio { background-color: #2e7d32; }
+        .btn-regreso { background-color: #ffa000; }
+        .btn-fin { background-color: #c62828; }
+        .btn-txt { background-color: #3498db; }
+        .btn-incapacidad { background-color: #8e44ad; }
+        
+        #status-btn { 
+            margin-top: 5px; 
+            margin-bottom: 15px;
+            font-size: 13px; 
+            padding: 8px; 
+            border-radius: 20px; 
+            background: #e0f2f1; 
+            color: #00796b; 
+            border: 1px solid #b2dfdb;
+            cursor: pointer;
+            display: inline-block;
+            transition: 0.3s;
+        }
+        #status-btn:hover { background: #b2dfdb; }
+
+        .sync-status {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: bold;
+            margin-left: 5px;
+        }
+        .sync-pending { background-color: #ffd54f; color: #856404; }
+        .sync-sent { background-color: #4caf50; color: white; }
+        .sync-partial { background-color: #2196f3; color: white; }
+        
+        .historial { margin-top: 20px; text-align: left; border-top: 2px solid #00796b; padding-top: 10px; }
+        .item-h { 
+            font-size: 12px; 
+            background: #fff; 
+            border: 1px solid #ddd; 
+            padding: 8px; 
+            margin-bottom: 5px; 
+            border-radius: 5px;
+            position: relative;
+        }
+        .day-complete {
+            background-color: #e8f5e8;
+            border-left: 4px solid #4caf50;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2 style="color: #00796b;">Regional Pamplona</h2>
+    
+    <div id="status-btn" onclick="cargarConfiguracion()">🔄 Actualizar Listado</div>
+    <div id="sync-indicator" style="font-size: 12px; margin-bottom: 10px; color: #666;"></div>
+
+    <div class="form-group">
+        <label>👷 Operario:</label>
+        <select id="operario" onchange="validarBotones()"><option value="">Seleccione...</option></select>
+    </div>
+
+    <div style="display: flex; gap: 10px;">
+        <div class="form-group" style="flex: 1;">
+            <label>🔁 Ciclo:</label>
+            <select id="ciclo"><option value="">--</option></select>
+        </div>
+        <div class="form-group" style="flex: 1;">
+            <label>📍 Sección:</label>
+            <select id="seccion"><option value="">--</option></select>
+        </div>
+    </div>
+
+    <div class="form-group">
+        <label id="labelVia">🛣️ Vía / Ubicación:</label>
+        <input type="text" id="via" placeholder="Ingrese dato de ubicación">
+    </div>
+
+    <div class="btn-grid">
+        <button id="btn-salida" class="btn btn-salida" onclick="procesar('salida')">1. TRASLADO SALIDA</button>
+        <button id="btn-inicio" class="btn btn-inicio" onclick="procesar('inicio')">2. INICIO LABOR</button>
+        <button id="btn-regreso" class="btn btn-regreso" onclick="procesar('regreso')">3. TRASLADO REGRESO</button>
+        <button id="btn-fin" class="btn btn-fin" onclick="procesar('fin')">4. FIN LABOR</button>
+    </div>
+
+    <div class="btn-grid">
+        <button id="btn-txt" class="btn btn-txt" onclick="procesarEspecial('TXT')">TXT</button>
+        <button id="btn-incap" class="btn btn-incapacidad" onclick="procesarEspecial('INCAPACIDAD')">INCAPACIDAD</button>
+    </div>
+
+    <div class="historial">
+        <strong>Historial del día:</strong>
+        <div id="listaH"></div>
+    </div>
+</div>
+
+<script>
+const GOOGLE_URL = 'https://script.google.com/macros/s/AKfycbxhL9z2Ja7I0QFHn3nReY2NVR1AIn1_SJtei9FIifBLI7vy8PWz0cv_6Dr1Y61z9blcJA/exec';
+const STORAGE_KEY = 'pamplona_vfinal_data';
+const PENDING_KEY = 'pamplona_pendientes';
+let db = { operarios: [], ciclos: [], secciones: {} };
+
+// Función para cargar o actualizar la base de datos desde el Excel
+async function cargarConfiguracion() {
+    const btnStatus = document.getElementById('status-btn');
+    btnStatus.innerText = "⏳ Cargando...";
+    
+    try {
+        const res = await fetch('config.xlsx?v=' + new Date().getTime());
+        const ab = await res.arrayBuffer();
+        const wb = XLSX.read(new Uint8Array(ab), { type: 'array' });
+        
+        procesarExcel(wb);
+        btnStatus.innerText = "✅ Listado Actualizado";
+        
+        localStorage.setItem('config_cache', JSON.stringify(db));
+        
+    } catch (e) {
+        console.log('Error cargando desde red, usando cache/local');
+        btnStatus.innerText = "📱 Modo offline";
+        
+        try {
+            const cache = await caches.open('pamplona-v7');
+            const cachedRes = await cache.match('config.xlsx');
+            
+            if (cachedRes) {
+                const ab = await cachedRes.arrayBuffer();
+                const wb = XLSX.read(new Uint8Array(ab), { type: 'array' });
+                procesarExcel(wb);
+            } else {
+                db = JSON.parse(localStorage.getItem('config_cache')) || db;
+                poblarSelects();
+            }
+        } catch (cacheError) {
+            db = JSON.parse(localStorage.getItem('config_cache')) || db;
+            poblarSelects();
+        }
+    }
+    
+    setTimeout(() => { 
+        if (navigator.onLine) {
+            btnStatus.innerText = "🔄 Actualizar Listado"; 
+        }
+    }, 3000);
+}
+
+function procesarExcel(wb) {
+    db.operarios = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], {header:1}).slice(1).flat();
+    db.ciclos = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[1]], {header:1}).slice(1).flat();
+    const rowsSec = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[2]], {header:1}).slice(1);
+    
+    db.secciones = {};
+    rowsSec.forEach(r => { 
+        if(!db.secciones[r[0]]) db.secciones[r[0]] = []; 
+        db.secciones[r[0]].push(r[1]); 
+    });
+    
+    localStorage.setItem('config_cache', JSON.stringify(db));
+    poblarSelects();
+}
+
+function poblarSelects() {
+    const sOp = document.getElementById('operario');
+    const sCi = document.getElementById('ciclo');
+    const valAntOp = sOp.value;
+    const valAntCi = sCi.value;
+
+    sOp.innerHTML = '<option value="">Seleccione...</option>';
+    sCi.innerHTML = '<option value="">--</option>';
+    
+    db.operarios.forEach(o => { if(o) sOp.add(new Option(o, o)); });
+    db.ciclos.forEach(c => { if(c) sCi.add(new Option(c, c)); });
+
+    if(valAntOp) sOp.value = valAntOp;
+    if(valAntCi) sCi.value = valAntCi;
+    
+    document.getElementById('ciclo').onchange = function() {
+        const sSe = document.getElementById('seccion');
+        sSe.innerHTML = '<option value="">--</option>';
+        if(db.secciones[this.value]) db.secciones[this.value].forEach(s => sSe.add(new Option(s, s)));
+    };
+    
+    validarBotones();
+    renderHistorial();
+}
+
+function validarBotones() {
+    const op = document.getElementById('operario').value;
+    const historial = JSON.parse(localStorage.getItem(STORAGE_KEY)) || [];
+    const hoy = new Date().toLocaleDateString();
+    const registro = historial.find(r => r.operario === op && r.fecha === hoy);
+
+    const inputs = [document.getElementById('operario'), document.getElementById('ciclo'), document.getElementById('seccion')];
+    const viaLabel = document.getElementById('labelVia');
+    const viaInput = document.getElementById('via');
+    
+    const btns = {
+        salida: document.getElementById('btn-salida'),
+        inicio: document.getElementById('btn-inicio'),
+        regreso: document.getElementById('btn-regreso'),
+        fin: document.getElementById('btn-fin'),
+        txt: document.getElementById('btn-txt'),
+        incap: document.getElementById('btn-incap')
+    };
+
+    viaLabel.innerText = "🛣️ Vía / Ubicación:";
+    viaInput.placeholder = "Ingrese dato de ubicación";
+
+    if (!op) {
+        Object.values(btns).forEach(b => b.disabled = true);
+        inputs.forEach(i => i.disabled = false);
+        return;
+    }
+
+    if (!registro) {
+        btns.salida.disabled = false;
+        btns.inicio.disabled = true;
+        btns.regreso.disabled = true;
+        btns.fin.disabled = true;
+        btns.txt.disabled = false;
+        btns.incap.disabled = false;
+        inputs.forEach(i => i.disabled = false);
+    } else {
+        inputs.forEach(i => i.disabled = true);
+        if(registro.especial) {
+            Object.values(btns).forEach(b => b.disabled = true);
+        } else {
+            btns.salida.disabled = true;
+            btns.inicio.disabled = !!registro.horaInicio || !registro.horaSalida;
+            btns.regreso.disabled = !!registro.horaRegreso || !registro.horaInicio;
+            btns.fin.disabled = !!registro.horaFin || !registro.horaRegreso;
+            btns.txt.disabled = true;
+            btns.incap.disabled = true;
+
+            if (!btns.inicio.disabled) {
+                viaLabel.innerText = "👥 Primer Usuario:";
+                viaInput.placeholder = "Ingrese su primer usuario";
+            }
+        }
+    }
+}
+
+function encriptar(lat, lon) {
+    const mapa = {"0":"F","1":"G","2":"C","3":"I","4":"V","5":"A","6":"B","7":"H","8":"Z","9":"J",".":"K",",":"L","-":"M"};
+    const c = lat.toFixed(7) + "," + lon.toFixed(7);
+    return [...c].map(l => mapa[l] || '').join('');
+}
+
+// Guardar registro (siempre pendiente hasta el FIN)
+function guardarRegistro(registro) {
+    let historial = JSON.parse(localStorage.getItem(STORAGE_KEY)) || [];
+    
+    // Buscar si ya existe el registro para hoy
+    const index = historial.findIndex(r => 
+        r.operario === registro.operario && 
+        r.fecha === registro.fecha
+    );
+    
+    // Asignar ID único si no tiene
+    if (!registro.id) {
+        registro.id = Date.now() + '-' + Math.random().toString(36).substr(2, 9);
+    }
+    
+    // Marcar como pendiente (no enviado a Google)
+    registro.syncStatus = 'pending';
+    registro.syncDate = null;
+    
+    if (index >= 0) {
+        // Actualizar registro existente
+        historial[index] = { ...historial[index], ...registro };
+    } else {
+        // Nuevo registro
+        historial.push(registro);
+    }
+    
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(historial));
+    renderHistorial();
+    actualizarIndicadorSync();
+}
+
+// Verificar si el día está completo (tiene todos los registros)
+function diaCompleto(registro) {
+    if (registro.especial) return true;
+    return registro.horaSalida && registro.horaInicio && 
+           registro.horaRegreso && registro.horaFin;
+}
+
+// Enviar día completo a Google Sheets
+async function enviarDiaCompleto(registro) {
+    if (!navigator.onLine) {
+        // Guardar en pendientes si no hay conexión
+        let pendientes = JSON.parse(localStorage.getItem(PENDING_KEY)) || [];
+        if (!pendientes.find(p => p.id === registro.id)) {
+            pendientes.push(registro);
+            localStorage.setItem(PENDING_KEY, JSON.stringify(pendientes));
+        }
+        actualizarIndicadorSync();
+        return false;
+    }
+    
+    try {
+        // Preparar datos para enviar
+        const datos = {
+            operario: registro.operario,
+            fecha: registro.fecha,
+            ciclo: registro.ciclo,
+            seccion: registro.seccion,
+            via: registro.via,
+            horaSalida: registro.horaSalida || '',
+            horaInicio: registro.horaInicio || '',
+            horaRegreso: registro.horaRegreso || '',
+            horaFin: registro.horaFin || '',
+            tipo: registro.especial ? 'ESPECIAL' : 'NORMAL',
+            especial: registro.especial ? registro.tipo : ''
+        };
+        
+        const fd = new FormData();
+        Object.keys(datos).forEach(k => fd.append(k, datos[k]));
+        fd.append('contexto', 'REPORTE_DIARIO');
+        
+        await fetch(GOOGLE_URL, { 
+            method: 'POST', 
+            mode: 'no-cors', 
+            body: fd 
+        });
+        
+        // Marcar como enviado
+        let historial = JSON.parse(localStorage.getItem(STORAGE_KEY)) || [];
+        const index = historial.findIndex(r => r.id === registro.id);
+        if (index >= 0) {
+            historial[index].syncStatus = 'sent';
+            historial[index].syncDate = new Date().toISOString();
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(historial));
+        }
+        
+        // Remover de pendientes
+        let pendientes = JSON.parse(localStorage.getItem(PENDING_KEY)) || [];
+        pendientes = pendientes.filter(p => p.id !== registro.id);
+        localStorage.setItem(PENDING_KEY, JSON.stringify(pendientes));
+        
+        actualizarIndicadorSync();
+        renderHistorial();
+        return true;
+        
+    } catch (error) {
+        console.error('Error enviando a Google:', error);
+        
+        // Guardar en pendientes para reintentar
+        let pendientes = JSON.parse(localStorage.getItem(PENDING_KEY)) || [];
+        if (!pendientes.find(p => p.id === registro.id)) {
+            pendientes.push(registro);
+            localStorage.setItem(PENDING_KEY, JSON.stringify(pendientes));
+        }
+        
+        actualizarIndicadorSync();
+        return false;
+    }
+}
+
+// Sincronizar días completos pendientes
+async function sincronizarPendientes() {
+    if (!navigator.onLine) return;
+    
+    const pendientes = JSON.parse(localStorage.getItem(PENDING_KEY)) || [];
+    const historial = JSON.parse(localStorage.getItem(STORAGE_KEY)) || [];
+    
+    for (const pendiente of pendientes) {
+        const registro = historial.find(h => h.id === pendiente.id);
+        if (registro && diaCompleto(registro)) {
+            await enviarDiaCompleto(registro);
+        }
+    }
+    
+    actualizarIndicadorSync();
+    renderHistorial();
+}
+
+function actualizarIndicadorSync() {
+    const pendientes = JSON.parse(localStorage.getItem(PENDING_KEY)) || [];
+    const historial = JSON.parse(localStorage.getItem(STORAGE_KEY)) || [];
+    const indicator = document.getElementById('sync-indicator');
+    
+    const completosPendientes = pendientes.filter(p => {
+        const reg = historial.find(h => h.id === p.id);
+        return reg && diaCompleto(reg);
+    }).length;
+    
+    if (completosPendientes > 0) {
+        if (navigator.onLine) {
+            indicator.innerHTML = `⏳ Enviando días completos... (${completosPendientes} pendientes)`;
+            sincronizarPendientes();
+        } else {
+            indicator.innerHTML = `📱 Sin conexión - ${completosPendientes} días completos por enviar`;
+        }
+    } else {
+        indicator.innerHTML = '✅ Todos los días completos sincronizados';
+    }
+}
+
+async function procesar(tipo) {
+    const op = document.getElementById('operario').value;
+    const via = document.getElementById('via').value;
+    if(!op || !via) return alert("Faltan datos");
+
+    navigator.geolocation.getCurrentPosition(async pos => {
+        const gps = encriptar(pos.coords.latitude, pos.coords.longitude);
+        const hora = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+        const hoy = new Date().toLocaleDateString();
+
+        let historial = JSON.parse(localStorage.getItem(STORAGE_KEY)) || [];
+        let registro = historial.find(item => item.operario === op && item.fecha === hoy);
+
+        if(!registro) {
+            registro = { 
+                operario: op, 
+                fecha: hoy, 
+                ciclo: document.getElementById('ciclo').value, 
+                seccion: document.getElementById('seccion').value, 
+                via: via, 
+                especial: false,
+                id: Date.now() + '-' + Math.random().toString(36).substr(2, 9)
+            };
+        }
+
+        // Actualizar según el tipo
+        if(tipo === 'salida') registro.horaSalida = hora;
+        if(tipo === 'inicio') registro.horaInicio = hora;
+        if(tipo === 'regreso') registro.horaRegreso = hora;
+        if(tipo === 'fin') registro.horaFin = hora;
+
+        // Guardar registro
+        guardarRegistro(registro);
+        
+        // Enviar a WhatsApp
+        let txtLabel = (tipo === 'inicio') ? "👥 Primer Usuario" : "📍 Vía";
+        const t = { salida: "🏍 Traslado Salida", inicio: "🧾 Inicio Labor", regreso: "🏍 Traslado Regreso", fin: "🪫 Fin Labor" };
+        const msg = `${t[tipo]}\n🗓 Fecha: ${hoy} ${gps.slice(0,10)}\n⏰ Hora: ${hora} ${gps.slice(10)}\n👷‍♂️ Op: ${op}\n🔁 Ciclo: ${registro.ciclo} | Sec: ${registro.seccion}\n${txtLabel}: ${via}`;
+        
+        window.open("https://wa.me/?text=" + encodeURIComponent(msg), "_blank");
+
+        // Si es FIN, verificar si el día está completo y enviar a Google
+        if (tipo === 'fin') {
+            if (diaCompleto(registro)) {
+                await enviarDiaCompleto(registro);
+            } else {
+                alert("⚠️ El día no está completo. Faltan registros.");
+            }
+        }
+
+        validarBotones();
+        renderHistorial();
+        
+    }, () => alert("GPS Obligatorio"), {enableHighAccuracy: true});
+}
+
+async function procesarEspecial(tipoEspecial) {
+    if(!confirm(`¿Está seguro de enviar ${tipoEspecial}? Esto bloqueará los reportes de labor por hoy.`)) return;
+    const op = document.getElementById('operario').value;
+    const via = document.getElementById('via').value;
+    const hoy = new Date().toLocaleDateString();
+    if(!op || !via) return alert("Seleccione operario e ingrese el motivo/ubicación");
+
+    const registro = { 
+        operario: op, 
+        fecha: hoy, 
+        especial: true, 
+        tipo: tipoEspecial, 
+        ciclo: tipoEspecial, 
+        via: via, 
+        hora: new Date().toLocaleTimeString(),
+        id: Date.now() + '-' + Math.random().toString(36).substr(2, 9)
+    };
+    
+    guardarRegistro(registro);
+
+    const msg = `🚨 REPORTE ESPECIAL: ${tipoEspecial}\n👷‍♂️ Operario: ${op}\n⏰ Hora: ${registro.hora}\n📍 Ubicación: ${via}`;
+    window.open("https://wa.me/?text=" + encodeURIComponent(msg), "_blank");
+
+    // Los especiales se envían inmediatamente a Google
+    await enviarDiaCompleto(registro);
+
+    validarBotones();
+    renderHistorial();
+}
+
+function renderHistorial() {
+    const historial = JSON.parse(localStorage.getItem(STORAGE_KEY)) || [];
+    const pendientes = JSON.parse(localStorage.getItem(PENDING_KEY)) || [];
+    
+    // Mostrar solo registros de hoy
+    const hoy = new Date().toLocaleDateString();
+    const registrosHoy = historial.filter(r => r.fecha === hoy);
+    
+    document.getElementById('listaH').innerHTML = registrosHoy.reverse().map(r => {
+        const isPending = pendientes.some(p => p.id === r.id);
+        const completo = diaCompleto(r);
+        let syncClass = 'sync-pending';
+        let syncText = '⏳ Pendiente';
+        
+        if (!isPending && r.syncStatus === 'sent') {
+            syncClass = 'sync-sent';
+            syncText = '✅ Completado';
+        } else if (completo) {
+            syncClass = 'sync-partial';
+            syncText = '📤 Listo para enviar';
+        }
+        
+        const claseDia = completo ? 'day-complete' : '';
+        
+        return `
+        <div class="item-h ${claseDia}">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <strong>${r.operario}</strong>
+                <span class="sync-status ${syncClass}">${syncText}</span>
+            </div>
+            <div style="margin-top: 5px;">
+                ${r.especial ? '🚨 ESPECIAL: ' + r.tipo : 
+                  '🚌 S: '+(r.horaSalida||'--') + 
+                  ' | 👷 I: '+(r.horaInicio||'--') + 
+                  ' | 🚌 R: '+(r.horaRegreso||'--') + 
+                  ' | 🏁 F: '+(r.horaFin||'--')}
+            </div>
+            ${completo && isPending && navigator.onLine ? 
+                `<button class="sync-btn" onclick="enviarDiaCompleto(JSON.parse('${JSON.stringify(r).replace(/'/g, "\\'")}'))">🔄 Enviar a Google</button>` : 
+                ''}
+        </div>
+    `}).join('');
+}
+
+// Escuchar cambios en la conexión
+window.addEventListener('online', () => {
+    actualizarIndicadorSync();
+    sincronizarPendientes();
+});
+
+window.addEventListener('offline', () => {
+    actualizarIndicadorSync();
+});
+
+// Verificar periódicamente
+setInterval(() => {
+    if (navigator.onLine) {
+        sincronizarPendientes();
+    }
+    actualizarIndicadorSync();
+}, 30000); // Cada 30 segundos
+
+window.onload = () => {
+    cargarConfiguracion();
+    actualizarIndicadorSync();
+    renderHistorial();
+};
+</script>
+</body>
+</html>
